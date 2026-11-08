@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="th">
+<head>
+<title>Cabal TH Report</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="config.js"></script>
+<meta charset="utf-8">
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2230; --muted:#667085; --line:#e4e7ec; --brand:#3451b2; --ok:#16794c; --warn:#b54708; --bad:#b42318; --track:#eaecf0; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 "Noto Sans Thai","Segoe UI",sans-serif; }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:12px 20px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  h1 { font-size:18px; margin:0 12px 0 0; }
+  .spacer { flex:1; }
+  .muted { color:var(--muted); font-size:12px; }
+  nav { display:flex; gap:4px; padding:10px 20px 0; flex-wrap:wrap; }
+  nav button { border:0; background:none; padding:8px 14px; border-radius:8px 8px 0 0; cursor:pointer; color:var(--muted); font:inherit; }
+  nav button.on { background:var(--card); color:var(--brand); font-weight:600; }
+  main { padding:0 20px 40px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:0 10px 10px 10px; padding:14px; overflow-x:auto; }
+  .tools { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; align-items:center; }
+  table { border-collapse:collapse; width:100%; }
+  th,td { padding:7px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
+  th { color:var(--muted); font-size:12px; font-weight:600; white-space:nowrap; }
+  input,select,textarea,button.b { font:inherit; padding:6px 9px; border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink); }
+  button.b { cursor:pointer; }
+  button.p { background:var(--brand); border-color:var(--brand); color:#fff; }
+  input.n { width:70px; }
+  .meter { min-width:112px; }
+  .bar { height:6px; border-radius:3px; background:var(--track); overflow:hidden; margin-top:2px; }
+  .bar i { display:block; height:100%; background:var(--brand); }
+  .bar.full i { background:var(--ok); }
+  .tag { font-size:12px; padding:1px 8px; border-radius:10px; background:var(--track); white-space:nowrap; }
+  .tag.bad { color:var(--bad); background:#fee4e2; } .tag.ok { color:var(--ok); background:#d1fadf; } .tag.warn { color:var(--warn); background:#fef0c7; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }
+  .card { border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .card.done { opacity:.55; }
+  .card pre { white-space:pre-wrap; font:inherit; margin:8px 0; }
+  a { color:var(--brand); }
+  button.link { border:0; background:none; padding:0; color:var(--brand); font:inherit; font-weight:600; cursor:pointer; text-align:left; }
+  tr.day td { background:var(--bg); font-weight:600; }
+  tr.day.multi td { background:#fef0c7; }
+  tr.off td { color:var(--muted); }
+  .tag.live { color:#b42318; background:#fee4e2; } .tag.clip { color:#175cd3; background:#d1e9ff; }
+  .facts { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px 16px; margin-bottom:10px; }
+  .facts div span { display:block; color:var(--muted); font-size:12px; }
+  table.grid { border-collapse:separate; border-spacing:0; width:max-content; font-size:12px; }
+  table.grid th, table.grid td { padding:3px 5px; border-bottom:1px solid var(--line); border-right:1px solid var(--line); }
+  table.grid .name { position:sticky; left:0; z-index:1; background:var(--card); min-width:150px; white-space:nowrap; }
+  table.grid .num { text-align:center; min-width:26px; }
+  table.grid .day-cell { text-align:center; min-width:34px; padding:2px; }
+  table.grid .weekend { color:var(--bad); }
+  table.grid .today { background:#eef4ff; }
+  table.grid tfoot td { font-weight:600; background:var(--bg); }
+  table.grid .full { color:var(--ok); font-weight:600; }
+  table.grid .over { color:var(--warn); font-weight:600; }
+  table.grid .remark { max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chip { border:0; border-radius:4px; padding:1px 4px; font:inherit; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .chip.p-PC { background:#d1e9ff; color:#175cd3; }
+  .chip.p-M { background:#d1fadf; color:#16794c; }
+  .chip.p-RE { background:#ebe9fe; color:#5925dc; }
+  .chip.p-review { background:#fef0c7; color:#b54708; }
+  .chip.many { outline:2px solid #f79009; }
+  .meters { display:flex; gap:24px; flex-wrap:wrap; margin-bottom:12px; }
+  body.locked header, body.locked nav, body.locked main { display:none; }
+  #login { display:none; min-height:80vh; align-items:center; justify-content:center; flex-direction:column; gap:12px; padding:16px; text-align:center; }
+  body.locked #login { display:flex; }
+  #toast { position:fixed; right:16px; bottom:16px; background:var(--ink); color:#fff; padding:9px 14px; border-radius:8px; display:none; max-width:80vw; }
+</style>
+</head>
+<body class="locked">
+<div id="login"><h1>Cabal TH Report</h1><p class="muted" id="login-msg">เข้าสู่ระบบด้วยบัญชี Google ที่ได้รับสิทธิ์</p><div id="login-btn"></div></div>
+<header>
+  <h1>Cabal TH Report</h1>
+  <select id="month" aria-label="เดือน"></select>
+  <span class="muted" id="last"></span>
+  <span class="spacer"></span>
+  <button class="b p" id="refresh">อัปเดตจาก YouTube</button>
+</header>
+<nav id="tabs"></nav>
+<main><div class="panel" id="view">กำลังโหลด…</div></main>
+<div id="toast" role="status"></div>
+<script>
+var S = { data:null, tab:'overview', pic:'', q:'', report:'', reportGame:'', copyPick:{}, detail:null, open:null, multiOnly:false, showIgnored:false };
+
+/** The web app runs in a sandboxed frame, so the older copy command is tried first. */
+function copyText(text, message) {
+  var area = document.createElement('textarea');
+  area.value = text;
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  var ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  document.body.removeChild(area);
+  if (ok) return toast(message);
+  navigator.clipboard.writeText(text).then(function () { toast(message); }, function () { toast('คัดลอกไม่สำเร็จ'); });
+}
+
+/** One row for the streamer report tab, columns A:M of "NEW ZRC (PC)". */
+function reportTsvRow(v) {
+  var clean = function (x) { return String(x === undefined || x === null ? '' : x).replace(/[\t\r\n]+/g, ' ').trim(); };
+  var title = clean(v.title);
+  if (/^[=+\-@]/.test(title)) title = '​' + title;
+  var chat = clean(v.chat), reaction = clean(v.reaction);
+  var engagement = chat === '' && reaction === '' ? '' : (Number(chat) || 0) + (Number(reaction) || 0);
+  return [title, clean(v.url), v.type === 'Live' ? 'Live' : 'Video', '', v.date, Number(String(v.date).slice(5, 7)),
+    clean(v.views), clean(v.likes), clean(v.average), clean(v.peak), chat, reaction, engagement].join('\t');
+}
+var PF = ['PC','M','RE'];
+var TABS = [['overview','ภาพรวม'],['review','ต้องตรวจ'],['remind','เตือนวันจันทร์'],['report','รายงาน'],['quota','โควตา']];
+
+function el(tag, attrs, kids) {
+  var n = document.createElement(tag);
+  Object.keys(attrs || {}).forEach(function (k) {
+    if (k === 'on') Object.keys(attrs.on).forEach(function (e) { n.addEventListener(e, attrs.on[e]); });
+    else if (k === 'text') n.textContent = attrs[k];
+    else if (attrs[k] !== undefined && attrs[k] !== false) n.setAttribute(k, attrs[k]);
+  });
+  [].concat(kids || []).forEach(function (c) { if (c !== null && c !== undefined) n.append(c); });
+  return n;
+}
+function toast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toast.t); toast.t = setTimeout(function () { t.style.display = 'none'; }, 3500);
+}
+var Auth = {
+  token:'',
+  set:function (t) { this.token = t; try { sessionStorage.setItem('cabal_id_token', t); } catch (e) {} },
+  clear:function () { this.token = ''; try { sessionStorage.removeItem('cabal_id_token'); } catch (e) {} },
+  restore:function () {
+    var t = '';
+    try { t = sessionStorage.getItem('cabal_id_token') || ''; } catch (e) {}
+    if (!t) return false;
+    try {
+      var exp = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp;
+      if (exp * 1000 < Date.now() + 60000) { this.clear(); return false; }
+    } catch (e) { this.clear(); return false; }
+    this.token = t;
+    return true;
+  }
+};
+function showLogin(message) {
+  document.body.classList.add('locked');
+  if (message) document.getElementById('login-msg').textContent = message;
+  var start = function () {
+    if (!window.google || !google.accounts) return setTimeout(start, 200);
+    google.accounts.id.initialize({ client_id:CABAL_CONFIG.clientId, callback:function (r) { Auth.set(r.credential); call('getData', []); } });
+    google.accounts.id.renderButton(document.getElementById('login-btn'), { theme:'outline', size:'large' });
+  };
+  start();
+}
+function call(fn, args, msg) {
+  if (!Auth.token) return showLogin();
+  var busy = document.getElementById('refresh');
+  busy.disabled = true;
+  fetch(CABAL_CONFIG.apiUrl, {
+    method:'POST',
+    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body:JSON.stringify({ token:Auth.token, action:fn, args:args })
+  }).then(function (r) { return r.json(); }).then(function (res) {
+    busy.disabled = false;
+    if (res.ok) {
+      document.body.classList.remove('locked');
+      S.data = res.data; render();
+      if (msg) toast(msg);
+    } else if (res.error === 'unauthorized') {
+      Auth.clear();
+      showLogin('บัญชีนี้ไม่มีสิทธิ์ หรือการเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+    } else {
+      toast('เกิดข้อผิดพลาด: ' + res.error);
+    }
+  }).catch(function (e) { busy.disabled = false; toast('เชื่อมต่อไม่สำเร็จ: ' + e.message); });
+}
+function safeLink(url, label) {
+  return /^https:\/\//.test(url || '') ? el('a', { href:url, target:'_blank', rel:'noopener', text:label }) : el('span', { text:label });
+}
+function field(label, node) { return el('label', { 'aria-label':label }, node); }
+
+function table(heads, rows) {
+  return el('table', {}, [
+    el('thead', {}, el('tr', {}, heads.map(function (h) { return el('th', { text:h }); }))),
+    el('tbody', {}, rows)
+  ]);
+}
+function td(c, a) { return el('td', a || {}, c); }
+
+function meter(done, quota) {
+  if (!quota && !done) return el('span', { class:'muted', text:'–' });
+  var left = Math.max(0, quota - done);
+  var pct = quota ? Math.min(100, done / quota * 100) : 100;
+  var fill = el('i'); fill.style.width = pct + '%';
+  return el('div', { class:'meter' }, [
+    el('div', {}, [ el('b', { text:done + '/' + quota }), el('span', { class:'muted', text: left ? ' เหลือ ' + left : done > quota ? ' เกิน ' + (done - quota) : ' ครบ' }) ]),
+    el('div', { class:'bar' + (left ? '' : ' full') }, fill)
+  ]);
+}
+
+var TYPE_LABEL = { Live:'ไลฟ์', Video:'คลิป', Short:'คลิปสั้น' };
+var STATUS_LABEL = { count:'นับ', review:'ต้องตรวจ', ignored:'ไม่นับ' };
+function typeTag(type) {
+  return el('span', { class:'tag ' + (type === 'Live' ? 'live' : 'clip'), text:TYPE_LABEL[type] || type || '–' });
+}
+function statusTag(status) {
+  return el('span', { class:'tag ' + (status === 'count' ? 'ok' : status === 'review' ? 'warn' : ''), text:STATUS_LABEL[status] || status });
+}
+function perDay(streamer) {
+  var days = {};
+  S.data.videos.forEach(function (v) {
+    if (v.streamer === streamer && v.status === 'count') days[v.date] = (days[v.date] || 0) + 1;
+  });
+  return days;
+}
+function multiDayCount(streamer) {
+  var days = perDay(streamer);
+  return Object.keys(days).filter(function (d) { return days[d] > 1; }).length;
+}
+function duration(sec) {
+  sec = Number(sec) || 0;
+  if (!sec) return '–';
+  var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60);
+  return (h ? h + ' ชม. ' : '') + m + ' นาที';
+}
+function thaiTime(iso) {
+  return iso ? new Date(iso).toLocaleTimeString('th-TH', { timeZone:'Asia/Bangkok', hour:'2-digit', minute:'2-digit' }) : '–';
+}
+function fact(label, value) {
+  return el('div', {}, [el('span', { text:label }), value === '' || value === undefined ? '–' : value]);
+}
+function videoFacts(v) {
+  var sel = el('select', { 'aria-label':'เกม' }, PF.map(function (p) {
+    return el('option', { value:p, selected:p === v.platform ? 'selected' : false, text:p });
+  }));
+  var save = function (status) { call('saveVideo', [v.videoId, { platform:sel.value, status:status }, S.data.month], 'บันทึกแล้ว'); };
+  return el('div', {}, [
+    el('div', { class:'facts' }, [
+      fact('วันที่', v.date), fact('เวลา', thaiTime(v.publishedAt)), fact('แบบ', typeTag(v.type)), fact('เกม', v.platform),
+      fact('ความยาว', duration(v.durationSec)), fact('วิว', v.views), fact('ไลก์', v.likes),
+      fact('Average', v.average), fact('Peak', v.peak), fact('Chat', v.chat), fact('Reaction', v.reaction),
+      fact('สถานะ', statusTag(v.status)), fact('เหตุผลที่ระบบจัด', v.reason)
+    ]),
+    el('div', { class:'tools' }, [
+      v.url ? safeLink(v.url, 'เปิดลิงก์งานนี้') : null, sel,
+      el('button', { class:'b p', text:'นับเป็นเกมนี้', on:{ click:function () { save('count'); } } }),
+      el('button', { class:'b', text:'ไม่นับ', on:{ click:function () { save('ignored'); } } })
+    ])
+  ]);
+}
+
+function manualForm(streamer) {
+  var d = el('input', { type:'date', 'aria-label':'วันที่' });
+  var t = el('select', { 'aria-label':'แบบงาน' }, [el('option', { value:'Live', text:'ไลฟ์' }), el('option', { value:'Video', text:'คลิป' })]);
+  var p = el('select', { 'aria-label':'เกม' }, PF.map(function (x) { return el('option', { value:x, text:x }); }));
+  var name = el('input', { placeholder:'ชื่องาน', 'aria-label':'ชื่องาน' });
+  var u = el('input', { placeholder:'ลิงก์ (ถ้ามี)', 'aria-label':'ลิงก์' });
+  var v = el('input', { class:'n', type:'number', min:'0', placeholder:'วิว', 'aria-label':'ยอดวิว' });
+  var add = el('button', { class:'b', text:'เพิ่มงานเอง', on:{ click:function () {
+    if (!d.value) return toast('เลือกวันที่ก่อน');
+    call('addManualVideo', [{ streamer:streamer, date:d.value, type:t.value, platform:p.value, title:name.value, url:u.value, views:v.value }, S.data.month], 'เพิ่มแล้ว');
+  } } });
+  return el('div', { class:'tools' }, [d, t, p, name, u, v, add]);
+}
+
+function detailView() {
+  var r = S.data.rows.filter(function (x) { return x.streamer === S.detail; })[0];
+  if (!r) { S.detail = null; return VIEWS.overview(); }
+  var days = perDay(r.streamer);
+  var list = S.data.videos.filter(function (v) {
+    return v.streamer === r.streamer && (S.showIgnored || v.status !== 'ignored') && (!S.multiOnly || days[v.date] > 1);
+  }).sort(function (a, b) { return (a.date + (a.publishedAt || '')) < (b.date + (b.publishedAt || '')) ? -1 : 1; });
+  var body = [];
+  var current = null;
+  list.forEach(function (v) {
+    if (v.date !== current) {
+      current = v.date;
+      var n = days[v.date] || 0;
+      body.push(el('tr', { class:'day' + (n > 1 ? ' multi' : '') }, [
+        el('td', { colspan:'6' }, [v.date + ' ', n > 1 ? el('span', { class:'tag warn', text:'ลง ' + n + ' งานในวันนี้' }) : null])
+      ]));
+    }
+    var isOpen = S.open === v.videoId;
+    body.push(el('tr', { class:v.status === 'ignored' ? 'off' : '' }, [
+      td(thaiTime(v.publishedAt)), td(typeTag(v.type)), td(el('span', { class:'tag', text:v.platform || '?' })),
+      td(el('button', { class:'link', 'aria-expanded':String(isOpen), text:v.title, on:{ click:function () { S.open = isOpen ? null : v.videoId; render(); } } })),
+      td(v.views), td(statusTag(v.status))
+    ]));
+    if (isOpen) body.push(el('tr', {}, el('td', { colspan:'6' }, videoFacts(v))));
+  });
+  var check = function (key, label) {
+    return el('label', {}, [el('input', { type:'checkbox', checked:S[key] ? 'checked' : false, on:{ change:function (e) { S[key] = e.target.checked; render(); } } }), ' ' + label]);
+  };
+  var lives = S.data.videos.filter(function (v) { return v.streamer === r.streamer && v.status === 'count' && v.type === 'Live'; }).length;
+  var clips = S.data.videos.filter(function (v) { return v.streamer === r.streamer && v.status === 'count' && v.type !== 'Live'; }).length;
+  return [
+    el('div', { class:'tools' }, [
+      el('button', { class:'b', text:'← กลับ', on:{ click:function () { S.detail = null; S.open = null; S.multiOnly = false; render(); } } }),
+      el('b', { text:r.streamer }), el('span', { class:'muted', text:r.pic + ' · ไลฟ์ ' + lives + ' · คลิป ' + clips + ' · ลงหลายงาน ' + multiDayCount(r.streamer) + ' วัน' })
+    ]),
+    el('div', { class:'meters' }, PF.map(function (p) { return el('div', {}, [el('span', { class:'muted', text:p }), meter(r.done[p], r.quota[p])]); })),
+    manualForm(r.streamer),
+    el('div', { class:'tools' }, [check('multiOnly', 'เฉพาะวันที่ลงมากกว่า 1 งาน'), check('showIgnored', 'แสดงงานที่ไม่นับด้วย')]),
+    list.length ? table(['เวลา','แบบ','เกม','งาน','วิว','สถานะ'], body) : el('p', { text:'ไม่มีงานตามเงื่อนไขนี้' })
+  ];
+}
+
+function picFilter() {
+  var pics = S.data.rows.map(function (r) { return r.pic; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+  return el('select', { 'aria-label':'ผู้ดูแล', on:{ change:function (e) { S.pic = e.target.value; render(); } } },
+    [el('option', { value:'', text:'ผู้ดูแลทั้งหมด' })].concat(pics.map(function (p) {
+      return el('option', { value:p, selected: S.pic === p ? 'selected' : false, text:p });
+    })));
+}
+
+var VIEWS = {
+  overview: function () {
+    var q = S.q.toLowerCase();
+    var d = S.data;
+    var rows = d.rows.filter(function (r) { return (!S.pic || r.pic === S.pic) && r.streamer.toLowerCase().indexOf(q) >= 0; });
+    var p = d.month.split('-').map(Number);
+    var days = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate();
+    var today = new Date().toLocaleDateString('en-CA', { timeZone:'Asia/Bangkok' });
+    var WEEK = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var dateOf = function (n) { return d.month + '-' + ('0' + n).slice(-2); };
+    var index = {};
+    d.videos.forEach(function (v) {
+      if (v.status === 'ignored') return;
+      var key = v.streamer + '|' + v.date;
+      (index[key] = index[key] || []).push(v);
+    });
+    var dayNums = [];
+    for (var n = 1; n <= days; n++) dayNums.push(n);
+    var open = function (name) { S.detail = name; S.open = null; render(); };
+    var colors = d.sheetSync && d.sheetSync.colors;
+    var pfHead = function (x) {
+      var th = el('th', { class:'num', text:x });
+      if (colors) { th.style.background = colors[x]; th.style.color = '#000'; }
+      return th;
+    };
+    var dayCell = function (r, n) {
+      var list = index[r.streamer + '|' + dateOf(n)] || [];
+      var cls = dateOf(n) === today ? 'today' : '';
+      if (!list.length) return el('td', { class:'day-cell ' + cls });
+      var counted = list.filter(function (v) { return v.status === 'count'; });
+      var kinds = counted.map(function (v) { return v.platform; }).filter(function (x, i, a) { return a.indexOf(x) === i; });
+      var text = !counted.length ? '?' : kinds.length > 1 ? kinds.join('+') : kinds[0] + (counted.length > 1 ? '×' + counted.length : '');
+      var chip = el('button', {
+        class:'chip ' + (counted.length ? 'p-' + kinds[0] : 'p-review') + (list.length > 1 ? ' many' : ''),
+        title:list.map(function (v) { return (TYPE_LABEL[v.type] || v.type) + ' ' + (v.platform || '?') + ': ' + v.title; }).join('\n'),
+        text:text, on:{ click:function () { open(r.streamer); } }
+      });
+      if (colors && counted.length) { chip.style.background = colors[kinds[0]]; chip.style.color = '#000'; }
+      return el('td', { class:'day-cell ' + cls }, chip);
+    };
+    var sumCell = function (r, x) {
+      if (!r.quota[x] && !r.done[x]) return el('td', { class:'num' });
+      return el('td', { class:'num ' + (r.done[x] > r.quota[x] ? 'over' : r.done[x] === r.quota[x] ? 'full' : ''), text:String(r.done[x]) });
+    };
+    var total = function (get) { return String(rows.reduce(function (a, r) { return a + (get(r) || 0); }, 0)); };
+    var search = el('input', { placeholder:'ค้นหาสตรีมเมอร์', value:S.q, 'aria-label':'ค้นหา', on:{ change:function (e) { S.q = e.target.value; render(); } } });
+    var once = el('input', { type:'checkbox', checked:d.onePerDay ? 'checked' : false, on:{ change:function (e) { call('setOnePerDay', [e.target.checked, d.month], 'คำนวณใหม่แล้ว'); } } });
+    return [
+      el('div', { class:'tools' }, [picFilter(), search, el('label', {}, [once, ' นับ 1 ครั้ง/ช่อง/วัน']),
+        el('span', { class:'muted', text:'×2 = ลง 2 งานในวันนั้น · ? = รอตรวจ · กดเพื่อดูรายละเอียด' })]),
+      el('table', { class:'grid' }, [
+        el('thead', {}, [
+          el('tr', {}, [el('th', { rowspan:'2', class:'name', text:'INFLUENCER' }), el('th', { colspan:'3', class:'num', text:'Quota' })]
+            .concat(dayNums.map(function (n) { return el('th', { class:'day-cell ' + (dateOf(n) === today ? 'today' : ''), text:String(n) }); }),
+              el('th', { colspan:'3', class:'num', text:'Summary' }), el('th', { rowspan:'2', text:'REMARK' }))),
+          el('tr', {}, PF.map(pfHead)
+            .concat(dayNums.map(function (n) {
+              var w = new Date(Date.UTC(p[0], p[1] - 1, n)).getUTCDay();
+              return el('th', { class:'day-cell ' + (w === 0 || w === 6 ? 'weekend' : ''), text:WEEK[w] });
+            }), PF.map(pfHead)))
+        ]),
+        el('tbody', {}, rows.map(function (r) {
+          return el('tr', {}, [el('td', { class:'name' }, [
+              el('button', { class:'link', text:r.streamer, on:{ click:function () { open(r.streamer); } } }),
+              r.hasChannel ? null : el('span', { class:'tag warn', text:r.source === 'Facebook' ? 'FB' : 'ไม่มีช่อง' })
+            ])].concat(PF.map(function (x) { return el('td', { class:'num', text:r.quota[x] ? String(r.quota[x]) : '' }); }),
+              dayNums.map(function (n) { return dayCell(r, n); }),
+              PF.map(function (x) { return sumCell(r, x); }),
+              el('td', { class:'muted remark', text:r.q.note })));
+        })),
+        el('tfoot', {}, el('tr', {}, [el('td', { class:'name', text:'Total' })]
+          .concat(PF.map(function (x) { return el('td', { class:'num', text:total(function (r) { return r.quota[x]; }) }); }),
+            dayNums.map(function () { return el('td', { class:'day-cell' }); }),
+            PF.map(function (x) { return el('td', { class:'num', text:total(function (r) { return r.done[x]; }) }); }),
+            el('td'))))
+      ])
+    ];
+  },
+  review: function () {
+    var list = S.data.videos.filter(function (v) { return v.status === 'review'; });
+    if (!list.length) return el('p', { text:'ไม่มีคลิปที่ต้องตรวจในเดือนนี้' });
+    return table(['วันที่','ช่อง','คลิป','เหตุผล','ประเภท','ตัดสิน'], list.map(function (v) {
+      var sel = el('select', { 'aria-label':'ประเภท' }, PF.map(function (p) { return el('option', { value:p, text:p }); }));
+      return el('tr', {}, [ td(v.date), td(v.streamer), td(safeLink(v.url, v.title)), td(el('span', { class:'tag warn', text:v.reason })), td(sel),
+        td([ el('button', { class:'b p', text:'นับ', on:{ click:function () { call('saveVideo', [v.videoId, { platform:sel.value, status:'count' }, S.data.month], 'บันทึกแล้ว'); } } }), ' ',
+             el('button', { class:'b', text:'ไม่นับ', on:{ click:function () { call('saveVideo', [v.videoId, { status:'ignored' }, S.data.month], 'บันทึกแล้ว'); } } }) ]) ]);
+    }));
+  },
+  remind: function () {
+    var list = S.data.reminders.filter(function (r) { return !S.pic || r.pic === S.pic; });
+    return [ el('div', { class:'tools' }, [picFilter(), el('span', { class:'muted', text:'สัปดาห์เริ่ม ' + S.data.week })]),
+      el('div', { class:'cards' }, list.map(function (r) {
+        return el('div', { class:'card' + (r.sent ? ' done' : '') }, [
+          el('b', { text:r.owner }), el('span', { class:'muted', text:' · ' + r.pic }),
+          el('pre', { text:r.text }),
+          el('button', { class:'b', text:'คัดลอก', on:{ click:function () { copyText(r.text, 'คัดลอกแล้ว'); } } }), ' ',
+          el('button', { class:'b' + (r.sent ? '' : ' p'), text:r.sent ? 'ยกเลิกแจ้งแล้ว' : 'แจ้งแล้ว', on:{ click:function () { call('setReminded', [r.owner, S.data.week, !r.sent, S.data.month]); } } })
+        ]);
+      })) ];
+  },
+  report: function () {
+    var names = S.data.rows.map(function (r) { return r.streamer; });
+    if (names.indexOf(S.report) < 0) S.report = names[0] || '';
+    var pick = el('select', { 'aria-label':'สตรีมเมอร์', on:{ change:function (e) { S.report = e.target.value; render(); } } }, names.map(function (n) {
+      return el('option', { value:n, selected:n === S.report ? 'selected' : false, text:n });
+    }));
+    var list = S.data.videos.filter(function (v) {
+      return v.streamer === S.report && v.status !== 'ignored' && (!S.reportGame || v.platform === S.reportGame);
+    }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    var isPicked = function (v) { return S.copyPick[v.videoId] === undefined ? v.status === 'count' : S.copyPick[v.videoId]; };
+    var setAll = function (on) { list.forEach(function (v) { S.copyPick[v.videoId] = on; }); render(); };
+    var gamePick = el('select', { 'aria-label':'เกมที่แสดง', on:{ change:function (e) { S.reportGame = e.target.value; render(); } } },
+      [['', 'ทุกเกม']].concat(PF.map(function (x) { return [x, x]; })).map(function (o) {
+        return el('option', { value:o[0], selected:S.reportGame === o[0] ? 'selected' : false, text:o[1] });
+      }));
+    var picked = list.filter(isPicked);
+    var copy = el('button', { class:'b p', text:'คัดลอก ' + picked.length + ' แถวไปชีทสตรีมเมอร์', on:{ click:function () {
+      if (!picked.length) return toast('ยังไม่ได้เลือกแถว');
+      copyText(picked.map(reportTsvRow).join('\n'), 'คัดลอกแล้ว ไปวางที่คอลัมน์ A แถวว่างแถวแรกในชีทสตรีมเมอร์');
+    } } });
+    var input = function (v, k, label) {
+      return el('input', { class:'n', type:'number', min:'0', value:v[k], 'aria-label':label, on:{ change:function (e) { var o = {}; o[k] = e.target.value; call('saveVideo', [v.videoId, o, S.data.month], 'บันทึกแล้ว'); } } });
+    };
+    return [ el('div', { class:'tools' }, [pick, gamePick, copy,
+        el('button', { class:'b', text:'เลือกทั้งหมด', on:{ click:function () { setAll(true); } } }),
+        el('button', { class:'b', text:'ไม่เลือก', on:{ click:function () { setAll(false); } } })]),
+      manualForm(S.report),
+      table(['เลือก','วันที่','คลิป','แบบ','เกม','วิว','ไลก์','Average','Peak','Chat','Reaction'], list.map(function (v) {
+        var box = el('input', { type:'checkbox', 'aria-label':'เลือกแถวนี้', checked:isPicked(v) ? 'checked' : false, on:{ change:function (e) { S.copyPick[v.videoId] = e.target.checked; render(); } } });
+        return el('tr', {}, [ td(box), td(v.date), td(safeLink(v.url, v.title)), td(v.type), td(el('span', { class:'tag', text:v.platform })), td(v.views), td(v.likes),
+          td(input(v,'average','Average')), td(input(v,'peak','Peak')), td(input(v,'chat','Chat')), td(input(v,'reaction','Reaction')) ]);
+      })) ];
+  },
+  quota: function () {
+    var keys = ['basePC','adjPC','baseM','adjM','baseRE','adjRE'];
+    var edits = {};
+    var save = el('button', { class:'b p', text:'บันทึกโควตา', on:{ click:function () {
+      var out = Object.keys(edits).map(function (k) { return edits[k]; });
+      if (out.length) call('saveQuota', [S.data.month, out], 'บันทึกแล้ว');
+    } } });
+    return [ el('div', { class:'tools' }, [save, el('span', { class:'muted', text:'ปกติ = โควตาเดือนนี้, ปรับ = ยอดทบหรือยอดหัก (ติดลบได้)' })]),
+      table(['สตรีมเมอร์','PC ปกติ','PC ปรับ','M ปกติ','M ปรับ','RE ปกติ','RE ปรับ','หมายเหตุ'], S.data.rows.map(function (r) {
+        var change = function (k, val) { edits[r.streamer] = edits[r.streamer] || { streamer:r.streamer }; edits[r.streamer][k] = val; };
+        var cells = keys.map(function (k) { return td(el('input', { class:'n', type:'number', value:r.q[k], 'aria-label':r.streamer + ' ' + k, on:{ change:function (e) { change(k, e.target.value); } } })); });
+        return el('tr', {}, [td(el('b', { text:r.streamer }))].concat(cells, td(el('input', { value:r.q.note, 'aria-label':'หมายเหตุ', on:{ change:function (e) { change('note', e.target.value); } } }))));
+      })) ];
+  }
+};
+
+function render() {
+  var d = S.data;
+  var month = document.getElementById('month');
+  month.replaceChildren.apply(month, d.months.map(function (m) { return el('option', { value:m, selected:m === d.month ? 'selected' : false, text:m }); }));
+  document.getElementById('last').textContent = (d.lastRefresh ? 'อัปเดตล่าสุด ' + new Date(d.lastRefresh).toLocaleString('th-TH') : 'ยังไม่เคยอัปเดต') + (d.failures.length ? ' · ดึงไม่สำเร็จ ' + d.failures.length + ' รายการ' : '') + (!d.sheetSync ? '' : d.sheetSync.error ? ' · ลงชีทสรุปยอดไม่สำเร็จ: ' + d.sheetSync.error : ' · ลงชีทสรุปยอดแล้ว' + (d.sheetSync.conflicts ? ' (ช่องที่กรอกเองไม่ตรง ' + d.sheetSync.conflicts + ')' : '') + (d.sheetSync.missing.length ? ' (ไม่พบแถว: ' + d.sheetSync.missing.join(', ') + ')' : ''));
+  var pending = d.videos.filter(function (v) { return v.status === 'review'; }).length;
+  var tabs = document.getElementById('tabs');
+  tabs.replaceChildren.apply(tabs, TABS.map(function (t) {
+    return el('button', { class:S.tab === t[0] ? 'on' : '', text:t[1] + (t[0] === 'review' && pending ? ' (' + pending + ')' : ''), on:{ click:function () { S.tab = t[0]; S.detail = null; S.open = null; render(); } } });
+  }));
+  var view = document.getElementById('view');
+  view.replaceChildren.apply(view, [].concat(S.tab === 'overview' && S.detail ? detailView() : VIEWS[S.tab]()));
+}
+document.getElementById('month').addEventListener('change', function (e) { call('getData', [e.target.value]); });
+document.getElementById('refresh').addEventListener('click', function () { call('refreshNow', [S.data && S.data.month], 'อัปเดตแล้ว'); });
+if (!CABAL_CONFIG.clientId || !CABAL_CONFIG.apiUrl) showLogin('ระบบยังตั้งค่าไม่เสร็จ');
+else if (Auth.restore()) call('getData', []);
+else showLogin();
+</script>
+</body>
+</html>
