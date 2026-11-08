@@ -22,13 +22,13 @@
     color-scheme:light;
     --bg:#f4f6f9; --surface:#ffffff; --surface-2:#eef1f5; --ink:#171b24; --muted:#5b6777; --line:#e1e6ec;
     --brand:#2f5bea; --on-brand:#ffffff; --ok:#0f7a4d; --ok-bg:#dcf5e8; --warn:#955400; --warn-bg:#fff0d4;
-    --bad:#c22f2f; --bad-bg:#fde6e6; --info:#1c64d1; --info-bg:#dfebff; --today:#e8f0ff; --shadow:0 1px 2px rgba(20,28,40,.06),0 8px 24px rgba(20,28,40,.05);
+    --cyan:#0b7f93; --bad:#c22f2f; --bad-bg:#fde6e6; --info:#1c64d1; --info-bg:#dfebff; --today:#e8f0ff; --shadow:0 1px 2px rgba(20,28,40,.06),0 8px 24px rgba(20,28,40,.05);
   }
   :root[data-theme="dark"] {
     color-scheme:dark;
     --bg:#0e1218; --surface:#171c25; --surface-2:#212835; --ink:#e8ecf2; --muted:#9dabbb; --line:#2c3543;
     --brand:#86a8ff; --on-brand:#0e1218; --ok:#62d6a1; --ok-bg:#12352a; --warn:#f2b552; --warn-bg:#3a2b10;
-    --bad:#f79090; --bad-bg:#3e1d20; --info:#8fb8ff; --info-bg:#1b2c4a; --today:#1b2a45; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+    --cyan:#34d8ec; --bad:#f79090; --bad-bg:#3e1d20; --info:#8fb8ff; --info-bg:#1b2c4a; --today:#1b2a45; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
   }
   * { box-sizing:border-box; }
   html { -webkit-text-size-adjust:100%; }
@@ -96,7 +96,8 @@
   table.grid .today, table.grid thead th.today { background:var(--today); }
   table.grid tfoot td, table.grid tfoot td.name { font-weight:700; background:var(--surface-2); border-bottom:0; }
   table.grid .full { color:var(--ok); font-weight:700; }
-  table.grid .over { color:var(--warn); font-weight:700; }
+  table.grid .over { color:var(--cyan); font-weight:700; }
+  table.grid .late { color:var(--bad); font-weight:700; }
   table.grid .remark { max-width:240px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .chip { border:0; border-radius:5px; padding:2px 5px; font:inherit; font-weight:700; cursor:pointer; white-space:nowrap; background:var(--surface-2); color:var(--ink); }
   .chip.p-review { background:var(--warn-bg); color:var(--warn); }
@@ -407,6 +408,8 @@ var VIEWS = {
     var days = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate();
     var today = new Date().toLocaleDateString('en-CA', { timeZone:'Asia/Bangkok' });
     var WEEK = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var thisMonth = today.slice(0, 7), todayNum = Number(today.slice(8));
+    var daysLeftToWarn = d.month < thisMonth ? 0 : d.month === thisMonth && todayNum >= 28 ? days - todayNum + 1 : null;
     var dateOf = function (n) { return d.month + '-' + ('0' + n).slice(-2); };
     var index = {};
     d.videos.forEach(function (v) {
@@ -444,7 +447,9 @@ var VIEWS = {
     };
     var sumCell = function (r, x) {
       if (!r.quota[x] && !r.done[x]) return el('td', { class:'num' });
-      return el('td', { class:'num ' + (r.done[x] > r.quota[x] ? 'over' : r.done[x] === r.quota[x] ? 'full' : ''), text:String(r.done[x]) });
+      var short = r.quota[x] - r.done[x];
+      var state = short < 0 ? 'over' : short === 0 ? 'full' : daysLeftToWarn !== null && short > daysLeftToWarn ? 'late' : '';
+      return el('td', { class:'num ' + state, text:String(r.done[x]) });
     };
     var total = function (get) { return String(rows.reduce(function (a, r) { return a + (get(r) || 0); }, 0)); };
     var search = el('input', { placeholder:'ค้นหาสตรีมเมอร์', value:S.q, 'aria-label':'ค้นหา', on:{ change:function (e) { S.q = e.target.value; render(); } } });
@@ -461,7 +466,7 @@ var VIEWS = {
     return [
       kpis,
       el('div', { class:'tools' }, [picFilter(), search, el('label', {}, [once, ' นับ 1 ครั้ง/ช่อง/วัน']),
-        el('span', { class:'muted', text:'×2 = ลง 2 งานในวันนั้น · ? = รอตรวจ · กดชื่อเพื่อเปิดช่อง กดงานเพื่อเปิดลิงก์งาน' })]),
+        el('span', { class:'muted', text:'×2 = ลง 2 งานในวันนั้น · ? = รอตรวจ · กดชื่อเพื่อเปิดช่อง กดงานเพื่อเปิดลิงก์งาน · Summary: เขียว = ครบ, ฟ้า = เกิน, แดง = เหลือวันไม่พอ' })]),
       el('table', { class:'grid' }, [
         el('thead', {}, [
           el('tr', {}, [el('th', { rowspan:'2', class:'name', text:'INFLUENCER' }), el('th', { colspan:'3', class:'num', text:'Quota' })]
