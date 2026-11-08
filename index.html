@@ -107,6 +107,11 @@
   body.locked #login { display:flex; }
   .login-card { background:var(--surface); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); padding:32px; width:100%; max-width:380px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:12px; }
   .login-card p { margin:0; }
+  #status { display:none; align-items:center; gap:7px; font-size:12px; font-weight:600; color:var(--info); background:var(--info-bg); padding:4px 11px; border-radius:999px; white-space:nowrap; }
+  #status.show { display:inline-flex; }
+  #status i { width:11px; height:11px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion:reduce) { #status i { animation:none; } }
   #toast { position:fixed; right:16px; bottom:16px; z-index:30; background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:10px; display:none; max-width:min(420px,calc(100vw - 32px)); box-shadow:var(--shadow); }
   @media (max-width:640px) {
     header { padding:10px 16px; position:static; }
@@ -127,6 +132,7 @@
   <h1>Cabal TH Report</h1>
   <select id="month" aria-label="เดือน"></select>
   <span class="muted" id="last"></span>
+  <span id="status" role="status"><i></i><span id="status-text"></span></span>
   <span class="spacer"></span>
   <div class="actions">
     <button class="b" id="theme" type="button"></button>
@@ -138,7 +144,7 @@
 <main><div class="panel" id="view">กำลังโหลด…</div></main>
 <div id="toast" role="status"></div>
 <script>
-var S = { data:null, tab:'overview', pic:'', q:'', report:'', reportGame:'', copyPick:{}, detail:null, open:null, multiOnly:false, showIgnored:false };
+var S = { data:null, tab:'overview', pic:'', q:'', report:'', reportGame:'', copyPick:{}, reviewPick:{}, detail:null, open:null, multiOnly:false, showIgnored:false };
 
 /** The web app runs in a sandboxed frame, so the older copy command is tried first. */
 function copyText(text, message) {
@@ -210,28 +216,112 @@ function showLogin(message) {
   };
   start();
 }
-function call(fn, args, msg) {
-  if (!Auth.token) return showLogin();
-  var busy = { set disabled(v) { ['refresh', 'sync'].forEach(function (id) { document.getElementById(id).disabled = v; }); } };
-  busy.disabled = true;
-  fetch(CABAL_CONFIG.apiUrl, {
+var Work = { loading:'', saves:0, syncing:false, timer:null, queue:Promise.resolve(), generation:0 };
+var WORK_LABELS = { getData:'กำลังโหลดข้อมูล…', refreshNow:'กำลังดึงจาก YouTube… ประมาณ 1 นาที', syncSheetNow:'กำลังลงชีทสรุปยอดไลฟ์…' };
+function paintStatus() {
+  var text = Work.saves ? 'กำลังบันทึก ' + Work.saves + ' รายการ…'
+    : Work.loading ? Work.loading
+    : (Work.timer || Work.syncing) ? 'กำลังอัปเดตยอดลงชีท…' : '';
+  document.getElementById('status-text').textContent = text;
+  document.getElementById('status').classList.toggle('show', !!text);
+}
+function apiPost(fn, args) {
+  return fetch(CABAL_CONFIG.apiUrl, {
     method:'POST',
     headers:{ 'Content-Type':'text/plain;charset=utf-8' },
     body:JSON.stringify({ token:Auth.token, action:fn, args:args })
   }).then(function (r) { return r.json(); }).then(function (res) {
-    busy.disabled = false;
-    if (res.ok) {
-      document.body.classList.remove('locked');
-      S.data = res.data; render();
-      if (fn === 'syncSheetNow' && res.data.sheetSync && res.data.sheetSync.error) toast('ลงชีทไม่สำเร็จ: ' + res.data.sheetSync.error);
-      else if (msg) toast(msg);
-    } else if (res.error === 'unauthorized') {
+    if (res.ok) return res.data;
+    if (res.error === 'unauthorized') {
       Auth.clear();
       showLogin('บัญชีนี้ไม่มีสิทธิ์ หรือการเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบใหม่');
-    } else {
-      toast('เกิดข้อผิดพลาด: ' + res.error);
     }
-  }).catch(function (e) { busy.disabled = false; toast('เชื่อมต่อไม่สำเร็จ: ' + e.message); });
+    throw new Error(res.error);
+  });
+}
+function call(fn, args, msg) {
+  if (!Auth.token) return showLogin();
+  var buttons = ['refresh', 'sync'].map(function (id) { return document.getElementById(id); });
+  buttons.forEach(function (b) { b.disabled = true; });
+  Work.loading = WORK_LABELS[fn] || 'กำลังบันทึก…';
+  paintStatus();
+  var done = function () {
+    buttons.forEach(function (b) { b.disabled = false; });
+    Work.loading = '';
+    paintStatus();
+  };
+  apiPost(fn, args).then(function (data) {
+    done();
+    document.body.classList.remove('locked');
+    S.data = data;
+    render();
+    if (fn === 'syncSheetNow' && data.sheetSync && data.sheetSync.error) toast('ลงชีทไม่สำเร็จ: ' + data.sheetSync.error);
+    else if (msg) toast(msg);
+  }).catch(function (e) {
+    done();
+    if (e.message !== 'unauthorized') toast('เกิดข้อผิดพลาด: ' + e.message);
+  });
+}
+
+/** Keeps the page and its counters in step with one video, before the server has answered. */
+function applyVideoLocal(videoId, patch) {
+  var v = S.data.videos.filter(function (x) { return x.videoId === videoId; })[0];
+  if (!v) return;
+  var row = S.data.rows.filter(function (r) { return r.streamer === v.streamer; })[0];
+  var before = v.status === 'count' ? v.platform : '';
+  Object.keys(patch).forEach(function (k) { v[k] = patch[k]; });
+  var after = v.status === 'count' ? v.platform : '';
+  if (row && before !== after) {
+    if (before) row.done[before]--;
+    if (after) row.done[after]++;
+  }
+}
+function saveVideoFast(v, patch) {
+  var undo = {};
+  Object.keys(patch).forEach(function (k) { undo[k] = v[k]; });
+  var id = v.videoId;
+  applyVideoLocal(id, patch);
+  if (patch.status !== undefined || patch.platform !== undefined) render();
+  Work.saves++;
+  Work.generation++;
+  clearTimeout(Work.timer);
+  Work.timer = null;
+  paintStatus();
+  Work.queue = Work.queue.then(function () {
+    return apiPost('saveVideo', [id, patch]);
+  }).catch(function (e) {
+    applyVideoLocal(id, undo);
+    render();
+    if (e.message !== 'unauthorized') toast('บันทึกไม่สำเร็จ: ' + e.message);
+  }).then(function () {
+    Work.saves--;
+    if (!Work.saves) scheduleSheetSync();
+    paintStatus();
+  });
+}
+/** One sheet update after a burst of decisions, instead of one per click. */
+function scheduleSheetSync() {
+  clearTimeout(Work.timer);
+  Work.timer = setTimeout(function () {
+    Work.timer = null;
+    Work.syncing = true;
+    paintStatus();
+    var generation = Work.generation;
+    apiPost('syncSheetNow', [S.data.month]).then(function (data) {
+      Work.syncing = false;
+      paintStatus();
+      if (generation !== Work.generation) return;
+      S.data = data;
+      var el2 = document.activeElement;
+      if (!el2 || el2.tagName !== 'INPUT') render();
+      if (data.sheetSync && data.sheetSync.error) toast('ลงชีทไม่สำเร็จ: ' + data.sheetSync.error);
+    }).catch(function (e) {
+      Work.syncing = false;
+      paintStatus();
+      if (e.message !== 'unauthorized') toast('ลงชีทไม่สำเร็จ: ' + e.message);
+    });
+  }, 1200);
+  paintStatus();
 }
 function safeLink(url, label) {
   return /^https:\/\//.test(url || '') ? el('a', { href:url, target:'_blank', rel:'noopener', text:label }) : el('span', { text:label });
@@ -292,7 +382,7 @@ function videoFacts(v) {
   var sel = el('select', { 'aria-label':'เกม' }, PF.map(function (p) {
     return el('option', { value:p, selected:p === v.platform ? 'selected' : false, text:p });
   }));
-  var save = function (status) { call('saveVideo', [v.videoId, { platform:sel.value, status:status }, S.data.month], 'บันทึกแล้ว'); };
+  var save = function (status) { saveVideoFast(v, { platform:sel.value, status:status }); };
   return el('div', {}, [
     el('div', { class:'facts' }, [
       fact('วันที่', v.date), fact('เวลา', thaiTime(v.publishedAt)), fact('แบบ', typeTag(v.type)), fact('เกม', v.platform),
@@ -464,10 +554,10 @@ var VIEWS = {
     var list = S.data.videos.filter(function (v) { return v.status === 'review'; });
     if (!list.length) return el('p', { text:'ไม่มีคลิปที่ต้องตรวจในเดือนนี้' });
     return table(['วันที่','ช่อง','คลิป','เหตุผล','ประเภท','ตัดสิน'], list.map(function (v) {
-      var sel = el('select', { 'aria-label':'ประเภท' }, PF.map(function (p) { return el('option', { value:p, text:p }); }));
+      var sel = el('select', { 'aria-label':'ประเภท', on:{ change:function (e) { S.reviewPick[v.videoId] = e.target.value; } } }, PF.map(function (p) { return el('option', { value:p, selected:S.reviewPick[v.videoId] === p ? 'selected' : false, text:p }); }));
       return el('tr', {}, [ td(v.date), td(v.streamer), td(safeLink(v.url, v.title)), td(el('span', { class:'tag warn', text:v.reason })), td(sel),
-        td([ el('button', { class:'b p', text:'นับ', on:{ click:function () { call('saveVideo', [v.videoId, { platform:sel.value, status:'count' }, S.data.month], 'บันทึกแล้ว'); } } }), ' ',
-             el('button', { class:'b', text:'ไม่นับ', on:{ click:function () { call('saveVideo', [v.videoId, { status:'ignored' }, S.data.month], 'บันทึกแล้ว'); } } }) ]) ]);
+        td([ el('button', { class:'b p', text:'นับ', on:{ click:function () { saveVideoFast(v, { platform:sel.value, status:'count' }); } } }), ' ',
+             el('button', { class:'b', text:'ไม่นับ', on:{ click:function () { saveVideoFast(v, { status:'ignored' }); } } }) ]) ]);
     }));
   },
   remind: function () {
@@ -503,7 +593,7 @@ var VIEWS = {
       copyText(picked.map(reportTsvRow).join('\n'), 'คัดลอกแล้ว ไปวางที่คอลัมน์ A แถวว่างแถวแรกในชีทสตรีมเมอร์');
     } } });
     var input = function (v, k, label) {
-      return el('input', { class:'n', type:'number', min:'0', value:v[k], 'aria-label':label, on:{ change:function (e) { var o = {}; o[k] = e.target.value; call('saveVideo', [v.videoId, o, S.data.month], 'บันทึกแล้ว'); } } });
+      return el('input', { class:'n', type:'number', min:'0', value:v[k], 'aria-label':label, on:{ change:function (e) { var o = {}; o[k] = e.target.value; saveVideoFast(v, o); } } });
     };
     return [ el('div', { class:'tools' }, [pick, gamePick, copy,
         el('button', { class:'b', text:'เลือกทั้งหมด', on:{ click:function () { setAll(true); } } }),
