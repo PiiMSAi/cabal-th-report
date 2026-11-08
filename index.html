@@ -101,7 +101,14 @@
   .chip { border:0; border-radius:5px; padding:2px 5px; font:inherit; font-weight:700; cursor:pointer; white-space:nowrap; background:var(--surface-2); color:var(--ink); }
   .chip.p-review { background:var(--warn-bg); color:var(--warn); }
   .chip.many { box-shadow:0 0 0 2px var(--ink); }
-  .meters { display:flex; gap:24px; flex-wrap:wrap; margin-bottom:14px; }
+  a.link { font-weight:600; color:var(--brand); text-decoration:none; }
+  a.link:hover { text-decoration:underline; }
+  span.link.plain { font-weight:600; }
+  a.chip { display:inline-block; text-decoration:none; }
+  span.chip { display:inline-block; cursor:default; }
+  .job-menu { position:fixed; z-index:40; background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); padding:6px; width:min(380px,calc(100vw - 16px)); max-height:50vh; overflow:auto; }
+  .job-menu a, .job-menu span { display:block; padding:7px 9px; border-radius:6px; color:var(--ink); text-decoration:none; }
+  .job-menu a:hover { background:var(--surface-2); }
   body.locked header, body.locked nav, body.locked main { display:none; }
   #login { display:none; min-height:100vh; align-items:center; justify-content:center; padding:16px; }
   body.locked #login { display:flex; }
@@ -144,7 +151,7 @@
 <main><div class="panel" id="view">กำลังโหลด…</div></main>
 <div id="toast" role="status"></div>
 <script>
-var S = { data:null, tab:'overview', pic:'', q:'', report:'', reportGame:'', copyPick:{}, reviewPick:{}, detail:null, open:null, multiOnly:false, showIgnored:false };
+var S = { data:null, tab:'overview', pic:'', q:'', report:'', reportGame:'', copyPick:{}, reviewPick:{}, };
 
 /** The web app runs in a sandboxed frame, so the older copy command is tried first. */
 function copyText(text, message) {
@@ -348,56 +355,6 @@ function meter(done, quota) {
 }
 
 var TYPE_LABEL = { Live:'ไลฟ์', Video:'คลิป', Short:'คลิปสั้น' };
-var STATUS_LABEL = { count:'นับ', review:'ต้องตรวจ', ignored:'ไม่นับ' };
-function typeTag(type) {
-  return el('span', { class:'tag ' + (type === 'Live' ? 'live' : 'clip'), text:TYPE_LABEL[type] || type || '–' });
-}
-function statusTag(status) {
-  return el('span', { class:'tag ' + (status === 'count' ? 'ok' : status === 'review' ? 'warn' : ''), text:STATUS_LABEL[status] || status });
-}
-function perDay(streamer) {
-  var days = {};
-  S.data.videos.forEach(function (v) {
-    if (v.streamer === streamer && v.status === 'count') days[v.date] = (days[v.date] || 0) + 1;
-  });
-  return days;
-}
-function multiDayCount(streamer) {
-  var days = perDay(streamer);
-  return Object.keys(days).filter(function (d) { return days[d] > 1; }).length;
-}
-function duration(sec) {
-  sec = Number(sec) || 0;
-  if (!sec) return '–';
-  var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60);
-  return (h ? h + ' ชม. ' : '') + m + ' นาที';
-}
-function thaiTime(iso) {
-  return iso ? new Date(iso).toLocaleTimeString('th-TH', { timeZone:'Asia/Bangkok', hour:'2-digit', minute:'2-digit' }) : '–';
-}
-function fact(label, value) {
-  return el('div', {}, [el('span', { text:label }), value === '' || value === undefined ? '–' : value]);
-}
-function videoFacts(v) {
-  var sel = el('select', { 'aria-label':'เกม' }, PF.map(function (p) {
-    return el('option', { value:p, selected:p === v.platform ? 'selected' : false, text:p });
-  }));
-  var save = function (status) { saveVideoFast(v, { platform:sel.value, status:status }); };
-  return el('div', {}, [
-    el('div', { class:'facts' }, [
-      fact('วันที่', v.date), fact('เวลา', thaiTime(v.publishedAt)), fact('แบบ', typeTag(v.type)), fact('เกม', v.platform),
-      fact('ความยาว', duration(v.durationSec)), fact('วิว', v.views), fact('ไลก์', v.likes),
-      fact('Average', v.average), fact('Peak', v.peak), fact('Chat', v.chat), fact('Reaction', v.reaction),
-      fact('สถานะ', statusTag(v.status)), fact('เหตุผลที่ระบบจัด', v.reason)
-    ]),
-    el('div', { class:'tools' }, [
-      v.url ? safeLink(v.url, 'เปิดลิงก์งานนี้') : null, sel,
-      el('button', { class:'b p', text:'นับเป็นเกมนี้', on:{ click:function () { save('count'); } } }),
-      el('button', { class:'b', text:'ไม่นับ', on:{ click:function () { save('ignored'); } } })
-    ])
-  ]);
-}
-
 function manualForm(streamer) {
   var d = el('input', { type:'date', 'aria-label':'วันที่' });
   var t = el('select', { 'aria-label':'แบบงาน' }, [el('option', { value:'Live', text:'ไลฟ์' }), el('option', { value:'Video', text:'คลิป' })]);
@@ -412,47 +369,26 @@ function manualForm(streamer) {
   return el('div', { class:'tools' }, [d, t, p, name, u, v, add]);
 }
 
-function detailView() {
-  var r = S.data.rows.filter(function (x) { return x.streamer === S.detail; })[0];
-  if (!r) { S.detail = null; return VIEWS.overview(); }
-  var days = perDay(r.streamer);
-  var list = S.data.videos.filter(function (v) {
-    return v.streamer === r.streamer && (S.showIgnored || v.status !== 'ignored') && (!S.multiOnly || days[v.date] > 1);
-  }).sort(function (a, b) { return (a.date + (a.publishedAt || '')) < (b.date + (b.publishedAt || '')) ? -1 : 1; });
-  var body = [];
-  var current = null;
-  list.forEach(function (v) {
-    if (v.date !== current) {
-      current = v.date;
-      var n = days[v.date] || 0;
-      body.push(el('tr', { class:'day' + (n > 1 ? ' multi' : '') }, [
-        el('td', { colspan:'6' }, [v.date + ' ', n > 1 ? el('span', { class:'tag warn', text:'ลง ' + n + ' งานในวันนี้' }) : null])
-      ]));
-    }
-    var isOpen = S.open === v.videoId;
-    body.push(el('tr', { class:v.status === 'ignored' ? 'off' : '' }, [
-      td(thaiTime(v.publishedAt)), td(typeTag(v.type)), td(el('span', { class:'tag', text:v.platform || '?' })),
-      td(el('button', { class:'link', 'aria-expanded':String(isOpen), text:v.title, on:{ click:function () { S.open = isOpen ? null : v.videoId; render(); } } })),
-      td(v.views), td(statusTag(v.status))
-    ]));
-    if (isOpen) body.push(el('tr', {}, el('td', { colspan:'6' }, videoFacts(v))));
-  });
-  var check = function (key, label) {
-    return el('label', {}, [el('input', { type:'checkbox', checked:S[key] ? 'checked' : false, on:{ change:function (e) { S[key] = e.target.checked; render(); } } }), ' ' + label]);
-  };
-  var lives = S.data.videos.filter(function (v) { return v.streamer === r.streamer && v.status === 'count' && v.type === 'Live'; }).length;
-  var clips = S.data.videos.filter(function (v) { return v.streamer === r.streamer && v.status === 'count' && v.type !== 'Live'; }).length;
-  return [
-    el('div', { class:'tools' }, [
-      el('button', { class:'b', text:'← กลับ', on:{ click:function () { S.detail = null; S.open = null; S.multiOnly = false; render(); } } }),
-      el('b', { text:r.streamer }), el('span', { class:'muted', text:r.pic + ' · ไลฟ์ ' + lives + ' · คลิป ' + clips + ' · ลงหลายงาน ' + multiDayCount(r.streamer) + ' วัน' })
-    ]),
-    el('div', { class:'meters' }, PF.map(function (p) { return el('div', {}, [el('span', { class:'muted', text:p }), meter(r.done[p], r.quota[p])]); })),
-    manualForm(r.streamer),
-    el('div', { class:'tools' }, [check('multiOnly', 'เฉพาะวันที่ลงมากกว่า 1 งาน'), check('showIgnored', 'แสดงงานที่ไม่นับด้วย')]),
-    list.length ? table(['เวลา','แบบ','เกม','งาน','วิว','สถานะ'], body) : el('p', { text:'ไม่มีงานตามเงื่อนไขนี้' })
-  ];
+function closeJobMenu() {
+  var open = document.getElementById('job-menu');
+  if (open) open.remove();
 }
+function showJobMenu(anchor, list) {
+  closeJobMenu();
+  var menu = el('div', { id:'job-menu', class:'job-menu', role:'menu' }, list.map(function (v) {
+    var text = (TYPE_LABEL[v.type] || v.type) + ' ' + (v.platform || '?') + ' · ' + v.title;
+    return /^https:\/\//.test(v.url || '')
+      ? el('a', { href:v.url, target:'_blank', rel:'noopener', role:'menuitem', text:text, on:{ click:closeJobMenu } })
+      : el('span', { text:text + ' (ไม่มีลิงก์)' });
+  }));
+  document.body.appendChild(menu);
+  var box = anchor.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(box.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+  menu.style.top = (box.bottom + menu.offsetHeight + 8 > window.innerHeight ? Math.max(8, box.top - menu.offsetHeight - 4) : box.bottom + 4) + 'px';
+}
+document.addEventListener('click', closeJobMenu);
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeJobMenu(); });
+window.addEventListener('scroll', closeJobMenu, true);
 
 function picFilter() {
   var pics = S.data.rows.map(function (r) { return r.pic; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
@@ -480,7 +416,6 @@ var VIEWS = {
     });
     var dayNums = [];
     for (var n = 1; n <= days; n++) dayNums.push(n);
-    var open = function (name) { S.detail = name; S.open = null; render(); };
     var colors = d.sheetSync && d.sheetSync.colors;
     var pfHead = function (x) {
       var th = el('th', { class:'num', text:x });
@@ -494,11 +429,16 @@ var VIEWS = {
       var counted = list.filter(function (v) { return v.status === 'count'; });
       var kinds = counted.map(function (v) { return v.platform; }).filter(function (x, i, a) { return a.indexOf(x) === i; });
       var text = !counted.length ? '?' : kinds.length > 1 ? kinds.join('+') : kinds[0] + (counted.length > 1 ? '×' + counted.length : '');
-      var chip = el('button', {
-        class:'chip ' + (counted.length ? 'p-' + kinds[0] : 'p-review') + (list.length > 1 ? ' many' : ''),
-        title:list.map(function (v) { return (TYPE_LABEL[v.type] || v.type) + ' ' + (v.platform || '?') + ': ' + v.title; }).join('\n'),
-        text:text, on:{ click:function () { open(r.streamer); } }
-      });
+      var kindClass = 'chip ' + (counted.length ? 'p-' + kinds[0] : 'p-review') + (list.length > 1 ? ' many' : '');
+      var label = list.map(function (v) { return (TYPE_LABEL[v.type] || v.type) + ' ' + (v.platform || '?') + ': ' + v.title; }).join('\n');
+      var chip;
+      if (list.length > 1) {
+        chip = el('button', { class:kindClass, type:'button', title:label, 'aria-haspopup':'menu', text:text, on:{ click:function (e) { e.stopPropagation(); showJobMenu(e.currentTarget, list); } } });
+      } else if (/^https:\/\//.test(list[0].url || '')) {
+        chip = el('a', { class:kindClass, href:list[0].url, target:'_blank', rel:'noopener', title:label, text:text });
+      } else {
+        chip = el('span', { class:kindClass, title:label + '\n(ไม่มีลิงก์)', text:text });
+      }
       if (colors && counted.length) { chip.style.background = colors[kinds[0]]; chip.style.color = '#000'; }
       return el('td', { class:'day-cell ' + cls }, chip);
     };
@@ -521,7 +461,7 @@ var VIEWS = {
     return [
       kpis,
       el('div', { class:'tools' }, [picFilter(), search, el('label', {}, [once, ' นับ 1 ครั้ง/ช่อง/วัน']),
-        el('span', { class:'muted', text:'×2 = ลง 2 งานในวันนั้น · ? = รอตรวจ · กดเพื่อดูรายละเอียด' })]),
+        el('span', { class:'muted', text:'×2 = ลง 2 งานในวันนั้น · ? = รอตรวจ · กดชื่อเพื่อเปิดช่อง กดงานเพื่อเปิดลิงก์งาน' })]),
       el('table', { class:'grid' }, [
         el('thead', {}, [
           el('tr', {}, [el('th', { rowspan:'2', class:'name', text:'INFLUENCER' }), el('th', { colspan:'3', class:'num', text:'Quota' })]
@@ -535,7 +475,7 @@ var VIEWS = {
         ]),
         el('tbody', {}, rows.map(function (r) {
           return el('tr', {}, [el('td', { class:'name' }, [
-              el('button', { class:'link', text:r.streamer, on:{ click:function () { open(r.streamer); } } }),
+              /^https:\/\//.test(r.channelUrl || '') ? el('a', { class:'link', href:r.channelUrl, target:'_blank', rel:'noopener', text:r.streamer }) : el('span', { class:'link plain', text:r.streamer }),
               r.hasChannel ? null : el('span', { class:'tag warn', text:r.source === 'Facebook' ? 'FB' : 'ไม่มีช่อง' })
             ])].concat(PF.map(function (x) { return el('td', { class:'num', text:r.quota[x] ? String(r.quota[x]) : '' }); }),
               dayNums.map(function (n) { return dayCell(r, n); }),
@@ -629,10 +569,10 @@ function render() {
   var pending = d.videos.filter(function (v) { return v.status === 'review'; }).length;
   var tabs = document.getElementById('tabs');
   tabs.replaceChildren.apply(tabs, TABS.map(function (t) {
-    return el('button', { class:S.tab === t[0] ? 'on' : '', text:t[1] + (t[0] === 'review' && pending ? ' (' + pending + ')' : ''), on:{ click:function () { S.tab = t[0]; S.detail = null; S.open = null; render(); } } });
+    return el('button', { class:S.tab === t[0] ? 'on' : '', text:t[1] + (t[0] === 'review' && pending ? ' (' + pending + ')' : ''), on:{ click:function () { S.tab = t[0]; render(); } } });
   }));
   var view = document.getElementById('view');
-  view.replaceChildren.apply(view, [].concat(S.tab === 'overview' && S.detail ? detailView() : VIEWS[S.tab]()));
+  view.replaceChildren.apply(view, [].concat(VIEWS[S.tab]()));
 }
 document.getElementById('month').addEventListener('change', function (e) { call('getData', [e.target.value]); });
 function paintTheme() {
