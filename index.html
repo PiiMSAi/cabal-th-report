@@ -108,7 +108,9 @@
   .manual h2 { font-size:15px; margin:0; }
   .manual > p { margin:0 0 10px; }
   .manual-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-  .manual-clip { display:grid; grid-template-columns:1fr auto auto; gap:2px 8px; align-items:center; padding:7px 0; border-top:1px solid var(--line); }
+  .manual-actions { display:flex; gap:6px; align-items:center; }
+  .manual-clip.rejected a { color:var(--muted); }
+  .manual-clip { display:grid; grid-template-columns:1fr auto; gap:2px 8px; align-items:center; padding:7px 0; border-top:1px solid var(--line); }
   .manual-clip > .muted { grid-column:1 / -1; }
   .manual-clip a { min-width:0; overflow-wrap:anywhere; }
   .manual-list { max-height:280px; overflow:auto; }
@@ -295,10 +297,13 @@ function applyVideoLocal(videoId, patch) {
   }
 }
 function saveVideoFast(v, patch) {
+  var local = {};
+  Object.keys(patch).forEach(function (k) { local[k] = patch[k]; });
+  if (patch.status !== undefined || patch.platform !== undefined) local.locked = 'TRUE';
   var undo = {};
-  Object.keys(patch).forEach(function (k) { undo[k] = v[k]; });
+  Object.keys(local).forEach(function (k) { undo[k] = v[k]; });
   var id = v.videoId;
-  applyVideoLocal(id, patch);
+  applyVideoLocal(id, local);
   if (patch.status !== undefined || patch.platform !== undefined) render();
   Work.saves++;
   Work.generation++;
@@ -314,6 +319,26 @@ function saveVideoFast(v, patch) {
   }).then(function () {
     Work.saves--;
     if (!Work.saves) scheduleSheetSync();
+    paintStatus();
+  });
+}
+function markManualChecked(check, week, month) {
+  var next = !check.done;
+  var setDone = function (value) {
+    (S.data.manualChecks || []).forEach(function (c) { if (c.streamer === check.streamer) c.done = value; });
+    render();
+  };
+  setDone(next);
+  Work.saves++;
+  Work.generation++;
+  paintStatus();
+  Work.queue = Work.queue.then(function () {
+    return apiPost('setReminded', ['CHECK:' + check.streamer, week, next, month]);
+  }).catch(function (e) {
+    setDone(!next);
+    if (e.message !== 'unauthorized') toast('บันทึกไม่สำเร็จ: ' + e.message);
+  }).then(function () {
+    Work.saves--;
     paintStatus();
   });
 }
@@ -416,10 +441,15 @@ function manualChecksSection() {
       var sel = el('select', { 'aria-label':'เกม', on:{ change:function (e) { S.reviewPick[v.videoId] = e.target.value; } } }, PF.map(function (p) {
         return el('option', { value:p, selected:p === pick ? 'selected' : false, text:p });
       }));
-      return el('div', { class:'manual-clip' }, [
-        el('span', { class:'muted', text:v.date + ' · ' + (TYPE_LABEL[v.type] || v.type) }),
-        safeLink(v.url, v.title), sel,
-        el('button', { class:'b', type:'button', text:'นับ', on:{ click:function () { saveVideoFast(v, { platform:sel.value, status:'count' }); } } })
+      var rejected = String(v.locked).toUpperCase() === 'TRUE';
+      var buttons = el('div', { class:'manual-actions' }, [
+        sel,
+        el('button', { class:'b p', type:'button', text:'นับ', on:{ click:function () { saveVideoFast(v, { platform:sel.value, status:'count' }); } } }),
+        rejected ? null : el('button', { class:'b', type:'button', text:'ไม่นับ', on:{ click:function () { saveVideoFast(v, { status:'ignored' }); } } })
+      ]);
+      return el('div', { class:'manual-clip' + (rejected ? ' rejected' : '') }, [
+        el('span', { class:'muted' }, [v.date + ' · ' + (TYPE_LABEL[v.type] || v.type) + ' ', rejected ? el('span', { class:'tag', text:'ไม่นับแล้ว' }) : null]),
+        safeLink(v.url, v.title), buttons
       ]);
     });
     return el('div', { class:'card' + (c.done ? ' done' : '') }, [
@@ -428,7 +458,7 @@ function manualChecksSection() {
         el('span', { class:'tag ' + (c.done ? 'ok' : 'warn'), text:c.done ? 'ตรวจแล้ว' : 'รอตรวจ' }),
         el('span', { class:'spacer' }),
         el('button', { class:'b' + (c.done ? '' : ' p'), type:'button', text:c.done ? 'ยกเลิก' : 'ตรวจแล้ว', on:{ click:function () {
-          call('setReminded', ['CHECK:' + c.streamer, d.week, !c.done, d.month], c.done ? 'เปิดแจ้งเตือนอีกครั้งแล้ว' : 'บันทึกว่าตรวจแล้ว');
+          markManualChecked(c, d.week, d.month);
         } } })
       ]),
       rows.length ? el('div', { class:'manual-list' }, rows) : el('p', { class:'muted', text:'เดือนนี้ไม่มีคลิปที่ระบบไม่นับ' })
