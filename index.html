@@ -192,7 +192,7 @@ function reportTsvRow(v) {
     clean(v.views), clean(v.likes), clean(v.average), clean(v.peak), chat, reaction, engagement].join('\t');
 }
 var PF = ['PC','M','RE'];
-var TABS = [['overview','ภาพรวม'],['review','ต้องตรวจ'],['remind','เตือนวันจันทร์'],['report','รายงาน'],['quota','โควตา']];
+var TABS = [['overview','ภาพรวม'],['review','ต้องตรวจ'],['remind','เตือนวันจันทร์'],['report','รายงาน'],['history','ย้อนหลัง'],['quota','โควตา']];
 
 function el(tag, attrs, kids) {
   var n = document.createElement(tag);
@@ -514,6 +514,63 @@ function picFilter() {
     })));
 }
 
+var History = { rows:null, loading:false, error:'', channel:'', game:'', search:'', month:'' };
+var H = { streamer:0, date:1, month:2, game:3, type:4, title:5, url:6, views:7, note:8 };
+function loadHistory() {
+  if (History.loading) return;
+  History.loading = true;
+  History.error = '';
+  Work.loading = 'กำลังโหลดข้อมูลย้อนหลัง…';
+  paintStatus();
+  apiPost('getHistory', []).then(function (data) {
+    History.rows = data.rows;
+  }).catch(function (e) {
+    if (e.message !== 'unauthorized') History.error = e.message;
+  }).then(function () {
+    Work.loading = '';
+    paintStatus();
+    if (S.tab === 'history') render();
+    History.loading = false;
+  });
+}
+function historyMatches() {
+  var q = History.search.trim().toLowerCase();
+  return History.rows.filter(function (r) {
+    return (!History.channel || r[H.streamer] === History.channel) && (!History.game || r[H.game] === History.game)
+      && (!q || r[H.title].toLowerCase().indexOf(q) >= 0);
+  });
+}
+function paintHistory(box) {
+  var rows = historyMatches();
+  var months = {};
+  rows.forEach(function (r) {
+    var m = months[r[H.month]] = months[r[H.month]] || { PC:0, M:0, RE:0, all:0 };
+    if (m[r[H.game]] !== undefined) m[r[H.game]]++;
+    m.all++;
+  });
+  var keys = Object.keys(months).sort().reverse();
+  var channelCount = rows.map(function (r) { return r[H.streamer]; }).filter(function (v, i, all) { return all.indexOf(v) === i; }).length;
+  var kpi = function (label, value) { return el('div', { class:'kpi' }, [el('span', { text:label }), el('b', { text:String(value) })]); };
+  var lines = keys.map(function (k) {
+    var m = months[k], open = History.month === k;
+    return el('tr', {}, [
+      td(el('button', { class:'b', type:'button', 'aria-expanded':open ? 'true' : 'false', text:(open ? '▾ ' : '▸ ') + k, on:{ click:function () { History.month = open ? '' : k; paintHistory(box); } } })),
+      td(String(m.PC)), td(String(m.M)), td(String(m.RE)), td(el('b', { text:String(m.all) }))
+    ]);
+  });
+  var detail = History.month && months[History.month] ? rows.filter(function (r) { return r[H.month] === History.month; })
+    .sort(function (a, b) { return String(a[H.date]).localeCompare(String(b[H.date])); }) : null;
+  box.replaceChildren.apply(box, [
+    el('div', { class:'kpis' }, [kpi('งานทั้งหมด', rows.length), kpi('ช่อง', channelCount), kpi('เดือน', keys.length)]),
+    keys.length ? table(['เดือน', 'PC', 'Mobile', 'Revolution', 'รวม'], lines) : el('p', { class:'muted', text:'ไม่พบงานตามตัวกรองนี้' }),
+    detail ? el('h3', { text:'งานเดือน ' + History.month + ' (' + detail.length + ')' }) : null,
+    detail ? table(['วันที่', 'ช่อง', 'เกม', 'ประเภท', 'งาน', 'ยอดวิว', 'หมายเหตุ'], detail.map(function (r) {
+      return el('tr', {}, [td(r[H.date] || '-'), td(r[H.streamer]), td(r[H.game]), td(r[H.type] || '-'), td(safeLink(r[H.url], r[H.title] || r[H.url] || '-')), td(r[H.views] || '-'), td(el('span', { class:'muted', text:r[H.note] }))]);
+    })) : null,
+    el('p', { class:'muted', text:'นับจากแท็บรายงานเก่าที่ไม่ได้ซ่อน ยอดบางเดือนจึงอาจต่ำกว่าชีท Summary เดิม' })
+  ].filter(Boolean));
+}
+
 var VIEWS = {
   overview: function () {
     var q = S.q.toLowerCase();
@@ -671,6 +728,22 @@ var VIEWS = {
         return el('tr', {}, [ td(box), td(v.date), td(safeLink(v.url, v.title)), td(v.type), td(el('span', { class:'tag', text:v.platform })), td(v.views), td(v.likes),
           td(input(v,'average','Average')), td(input(v,'peak','Peak')), td(input(v,'chat','Chat')), td(input(v,'reaction','Reaction')) ]);
       })) ];
+  },
+  history: function () {
+    if (!History.rows) {
+      loadHistory();
+      return el('p', { class:'muted', text:History.error ? 'โหลดไม่สำเร็จ: ' + History.error : 'กำลังโหลดข้อมูลย้อนหลัง…' });
+    }
+    var channels = History.rows.map(function (r) { return r[H.streamer]; }).filter(function (v, i, all) { return all.indexOf(v) === i; }).sort();
+    var results = el('div', {});
+    var option = function (value, label, current) { return el('option', { value:value, selected:value === current ? 'selected' : false, text:label }); };
+    var channel = el('select', { 'aria-label':'ช่อง', on:{ change:function (e) { History.channel = e.target.value; History.month = ''; paintHistory(results); } } },
+      [option('', 'ทุกช่อง', History.channel)].concat(channels.map(function (c) { return option(c, c, History.channel); })));
+    var game = el('select', { 'aria-label':'เกม', on:{ change:function (e) { History.game = e.target.value; paintHistory(results); } } },
+      [['', 'ทุกเกม'], ['PC', 'PC'], ['M', 'Mobile'], ['RE', 'Revolution']].map(function (g) { return option(g[0], g[1], History.game); }));
+    var search = el('input', { type:'search', placeholder:'ค้นหาชื่องาน', 'aria-label':'ค้นหาชื่องาน', value:History.search, on:{ input:function (e) { History.search = e.target.value; paintHistory(results); } } });
+    paintHistory(results);
+    return [ el('div', { class:'tools' }, [channel, game, search]), results ];
   },
   quota: function () {
     var keys = ['basePC','adjPC','baseM','adjM','baseRE','adjRE'];
