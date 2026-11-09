@@ -102,6 +102,16 @@
   .chip { border:0; border-radius:5px; padding:2px 5px; font:inherit; font-weight:700; cursor:pointer; white-space:nowrap; background:var(--surface-2); color:var(--ink); }
   .chip.p-review { background:var(--warn-bg); color:var(--warn); }
   .chip.many { box-shadow:0 0 0 2px var(--ink); }
+  .notice { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; justify-content:space-between; background:var(--warn-bg); color:var(--warn); border-radius:10px; padding:10px 14px; margin-bottom:14px; font-weight:600; }
+  .notice .b { color:var(--ink); }
+  .manual { margin-bottom:20px; }
+  .manual h2 { font-size:15px; margin:0; }
+  .manual > p { margin:0 0 10px; }
+  .manual-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .manual-clip { display:grid; grid-template-columns:1fr auto auto; gap:2px 8px; align-items:center; padding:7px 0; border-top:1px solid var(--line); }
+  .manual-clip > .muted { grid-column:1 / -1; }
+  .manual-clip a { min-width:0; overflow-wrap:anywhere; }
+  .manual-list { max-height:280px; overflow:auto; }
   a.link { font-weight:600; color:var(--brand); text-decoration:none; }
   a.link:hover { text-decoration:underline; }
   span.link.plain { font-weight:600; }
@@ -391,6 +401,46 @@ document.addEventListener('click', closeJobMenu);
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeJobMenu(); });
 window.addEventListener('scroll', closeJobMenu, true);
 
+function manualPending() {
+  return (S.data.manualChecks || []).filter(function (c) { return !c.done; });
+}
+function manualChecksSection() {
+  var d = S.data;
+  var cards = (d.manualChecks || []).map(function (c) {
+    var row = d.rows.filter(function (r) { return r.streamer === c.streamer; })[0];
+    var main = row && row.quota.PC > row.quota.M ? 'PC' : 'M';
+    var clips = d.videos.filter(function (v) { return v.streamer === c.streamer && v.status === 'ignored' && v.type !== 'Short'; })
+      .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    var rows = clips.map(function (v) {
+      var pick = S.reviewPick[v.videoId] || main;
+      var sel = el('select', { 'aria-label':'เกม', on:{ change:function (e) { S.reviewPick[v.videoId] = e.target.value; } } }, PF.map(function (p) {
+        return el('option', { value:p, selected:p === pick ? 'selected' : false, text:p });
+      }));
+      return el('div', { class:'manual-clip' }, [
+        el('span', { class:'muted', text:v.date + ' · ' + (TYPE_LABEL[v.type] || v.type) }),
+        safeLink(v.url, v.title), sel,
+        el('button', { class:'b', type:'button', text:'นับ', on:{ click:function () { saveVideoFast(v, { platform:sel.value, status:'count' }); } } })
+      ]);
+    });
+    return el('div', { class:'card' + (c.done ? ' done' : '') }, [
+      el('div', { class:'manual-head' }, [
+        /^https:\/\//.test(c.url || '') ? el('a', { class:'link', href:c.url, target:'_blank', rel:'noopener', text:c.streamer }) : el('b', { text:c.streamer }),
+        el('span', { class:'tag ' + (c.done ? 'ok' : 'warn'), text:c.done ? 'ตรวจแล้ว' : 'รอตรวจ' }),
+        el('span', { class:'spacer' }),
+        el('button', { class:'b' + (c.done ? '' : ' p'), type:'button', text:c.done ? 'ยกเลิก' : 'ตรวจแล้ว', on:{ click:function () {
+          call('setReminded', ['CHECK:' + c.streamer, d.week, !c.done, d.month], c.done ? 'เปิดแจ้งเตือนอีกครั้งแล้ว' : 'บันทึกว่าตรวจแล้ว');
+        } } })
+      ]),
+      rows.length ? el('div', { class:'manual-list' }, rows) : el('p', { class:'muted', text:'เดือนนี้ไม่มีคลิปที่ระบบไม่นับ' })
+    ]);
+  });
+  return el('section', { class:'manual' }, [
+    el('h2', { text:'ช่องที่ต้องเข้าไปตรวจเอง' }),
+    el('p', { class:'muted', text:'แจ้งเตือนใหม่ทุกวันจันทร์ · สัปดาห์เริ่ม ' + d.week }),
+    el('div', { class:'cards' }, cards)
+  ]);
+}
+
 function picFilter() {
   var pics = S.data.rows.map(function (r) { return r.pic; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
   return el('select', { 'aria-label':'ผู้ดูแล', on:{ change:function (e) { S.pic = e.target.value; render(); } } },
@@ -463,7 +513,13 @@ var VIEWS = {
       if (colors) fill.style.background = colors[x];
       return el('div', { class:'kpi' }, [el('span', { text:x + ' ทำแล้ว / โควตา' }), el('b', {}, [String(done), el('small', { text:' / ' + quota })]), el('div', { class:'bar' }, fill)]);
     }).concat(el('button', { class:'kpi', type:'button', on:{ click:function () { S.tab = 'review'; render(); } } }, [el('span', { text:'รอตรวจ' }), el('b', { text:String(pending) })])));
+    var waiting = manualPending();
+    var notice = waiting.length ? el('div', { class:'notice' }, [
+      el('span', { text:'ต้องเข้าไปตรวจงานเองสัปดาห์นี้: ' + waiting.map(function (c) { return c.streamer; }).join(', ') }),
+      el('button', { class:'b', type:'button', text:'ไปตรวจ', on:{ click:function () { S.tab = 'review'; render(); } } })
+    ]) : null;
     return [
+      notice,
       kpis,
       el('div', { class:'tools' }, [picFilter(), search, el('label', {}, [once, ' นับ 1 ครั้ง/ช่อง/วัน']),
         el('span', { class:'muted', text:'×2 = ลง 2 งานในวันนั้น · ? = รอตรวจ · กดชื่อเพื่อเปิดช่อง กดงานเพื่อเปิดลิงก์งาน · Summary: เขียว = ครบ, ฟ้า = เกิน, แดง = เหลือวันไม่พอ' })]),
@@ -495,7 +551,8 @@ var VIEWS = {
       ])
     ];
   },
-  review: function () {
+  review: function () { return [manualChecksSection(), VIEWS.reviewList()]; },
+  reviewList: function () {
     var list = S.data.videos.filter(function (v) { return v.status === 'review'; });
     if (!list.length) return el('p', { text:'ไม่มีคลิปที่ต้องตรวจในเดือนนี้' });
     return table(['วันที่','ช่อง','คลิป','เหตุผล','ประเภท','ตัดสิน'], list.map(function (v) {
@@ -571,7 +628,7 @@ function render() {
   var month = document.getElementById('month');
   month.replaceChildren.apply(month, d.months.map(function (m) { return el('option', { value:m, selected:m === d.month ? 'selected' : false, text:m }); }));
   document.getElementById('last').textContent = (d.lastRefresh ? 'อัปเดตล่าสุด ' + new Date(d.lastRefresh).toLocaleString('th-TH') : 'ยังไม่เคยอัปเดต') + (d.failures.length ? ' · ดึงไม่สำเร็จ ' + d.failures.length + ' รายการ' : '') + (!d.sheetSync ? '' : d.sheetSync.error ? ' · ลงชีทสรุปยอดไม่สำเร็จ: ' + d.sheetSync.error : ' · ลงชีทสรุปยอดแล้ว' + (d.sheetSync.conflicts ? ' (ช่องที่กรอกเองไม่ตรง ' + d.sheetSync.conflicts + ')' : '') + (d.sheetSync.missing.length ? ' (ไม่พบแถว: ' + d.sheetSync.missing.join(', ') + ')' : '')) + (d.docSync && d.docSync.errors.length ? ' · อัปเดต Docs ไม่สำเร็จ: ' + d.docSync.errors.join(', ') : '');
-  var pending = d.videos.filter(function (v) { return v.status === 'review'; }).length;
+  var pending = d.videos.filter(function (v) { return v.status === 'review'; }).length + manualPending().length;
   var tabs = document.getElementById('tabs');
   tabs.replaceChildren.apply(tabs, TABS.map(function (t) {
     return el('button', { class:S.tab === t[0] ? 'on' : '', text:t[1] + (t[0] === 'review' && pending ? ' (' + pending + ')' : ''), on:{ click:function () { S.tab = t[0]; render(); } } });
