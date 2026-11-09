@@ -625,7 +625,7 @@ var VIEWS = {
     };
     var total = function (get) { return String(rows.reduce(function (a, r) { return a + (get(r) || 0); }, 0)); };
     var search = el('input', { placeholder:'ค้นหาสตรีมเมอร์', value:S.q, 'aria-label':'ค้นหา', on:{ change:function (e) { S.q = e.target.value; render(); } } });
-    var once = el('input', { type:'checkbox', checked:d.onePerDay ? 'checked' : false, on:{ change:function (e) { call('setOnePerDay', [e.target.checked, d.month], 'คำนวณใหม่แล้ว'); } } });
+    var once = el('input', { type:'checkbox', disabled:d.readOnly ? 'disabled' : false, checked:d.onePerDay ? 'checked' : false, on:{ change:function (e) { call('setOnePerDay', [e.target.checked, d.month], 'คำนวณใหม่แล้ว'); } } });
     var pending = d.videos.filter(function (v) { return v.status === 'review'; }).length;
     var totalOf = function (x, key) { return rows.reduce(function (a, r) { return a + (r[key][x] || 0); }, 0); };
     var kpis = el('div', { class:'kpis' }, PF.map(function (x) {
@@ -634,7 +634,7 @@ var VIEWS = {
       fill.style.width = (quota ? Math.min(100, done / quota * 100) : 0) + '%';
       if (colors) fill.style.background = colors[x];
       return el('div', { class:'kpi' }, [el('span', { text:x + ' ทำแล้ว / โควตา' }), el('b', {}, [String(done), el('small', { text:' / ' + quota })]), el('div', { class:'bar' }, fill)]);
-    }).concat(el('button', { class:'kpi', type:'button', on:{ click:function () { S.tab = 'review'; render(); } } }, [el('span', { text:'รอตรวจ' }), el('b', { text:String(pending) })])));
+    }).concat(d.readOnly ? [] : el('button', { class:'kpi', type:'button', on:{ click:function () { S.tab = 'review'; render(); } } }, [el('span', { text:'รอตรวจ' }), el('b', { text:String(pending) })])));
     var waiting = manualPending();
     var notice = waiting.length ? el('div', { class:'notice' }, [
       el('span', { text:'ต้องเข้าไปตรวจงานเองสัปดาห์นี้: ' + waiting.map(function (c) { return c.streamer; }).join(', ') }),
@@ -717,12 +717,12 @@ var VIEWS = {
       copyText(picked.map(reportTsvRow).join('\n'), 'คัดลอกแล้ว ไปวางที่คอลัมน์ A แถวว่างแถวแรกในชีทสตรีมเมอร์');
     } } });
     var input = function (v, k, label) {
-      return el('input', { class:'n', type:'number', min:'0', value:v[k], 'aria-label':label, on:{ change:function (e) { var o = {}; o[k] = e.target.value; saveVideoFast(v, o); } } });
+      return el('input', { class:'n', type:'number', min:'0', value:v[k], 'aria-label':label, disabled:S.data.readOnly ? 'disabled' : false, on:{ change:function (e) { var o = {}; o[k] = e.target.value; saveVideoFast(v, o); } } });
     };
     return [ el('div', { class:'tools' }, [pick, gamePick, copy,
         el('button', { class:'b', text:'เลือกทั้งหมด', on:{ click:function () { setAll(true); } } }),
         el('button', { class:'b', text:'ไม่เลือก', on:{ click:function () { setAll(false); } } })]),
-      manualForm(S.report),
+      S.data.readOnly ? null : manualForm(S.report),
       table(['เลือก','วันที่','คลิป','แบบ','เกม','วิว','ไลก์','Average','Peak','Chat','Reaction'], list.map(function (v) {
         var box = el('input', { type:'checkbox', 'aria-label':'เลือกแถวนี้', checked:isPicked(v) ? 'checked' : false, on:{ change:function (e) { S.copyPick[v.videoId] = e.target.checked; render(); } } });
         return el('tr', {}, [ td(box), td(v.date), td(safeLink(v.url, v.title)), td(v.type), td(el('span', { class:'tag', text:v.platform })), td(v.views), td(v.likes),
@@ -752,11 +752,12 @@ var VIEWS = {
       var out = Object.keys(edits).map(function (k) { return edits[k]; });
       if (out.length) call('saveQuota', [S.data.month, out], 'บันทึกแล้ว');
     } } });
-    return [ el('div', { class:'tools' }, [save, el('span', { class:'muted', text:'ปกติ = โควตาเดือนนี้, ปรับ = ยอดทบหรือยอดหัก (ติดลบได้)' })]),
+    var locked = S.data.readOnly ? 'disabled' : false;
+    return [ el('div', { class:'tools' }, [locked ? null : save, el('span', { class:'muted', text:'ปกติ = โควตาเดือนนี้, ปรับ = ยอดทบหรือยอดหัก (ติดลบได้)' })]),
       table(['สตรีมเมอร์','PC ปกติ','PC ปรับ','M ปกติ','M ปรับ','RE ปกติ','RE ปรับ','หมายเหตุ'], S.data.rows.map(function (r) {
         var change = function (k, val) { edits[r.streamer] = edits[r.streamer] || { streamer:r.streamer }; edits[r.streamer][k] = val; };
-        var cells = keys.map(function (k) { return td(el('input', { class:'n', type:'number', value:r.q[k], 'aria-label':r.streamer + ' ' + k, on:{ change:function (e) { change(k, e.target.value); } } })); });
-        return el('tr', {}, [td(el('b', { text:r.streamer }))].concat(cells, td(el('input', { value:r.q.note, 'aria-label':'หมายเหตุ', on:{ change:function (e) { change('note', e.target.value); } } }))));
+        var cells = keys.map(function (k) { return td(el('input', { class:'n', type:'number', value:r.q[k], disabled:locked, 'aria-label':r.streamer + ' ' + k, on:{ change:function (e) { change(k, e.target.value); } } })); });
+        return el('tr', {}, [td(el('b', { text:r.streamer }))].concat(cells, td(el('input', { value:r.q.note, disabled:locked, 'aria-label':'หมายเหตุ', on:{ change:function (e) { change('note', e.target.value); } } }))));
       })) ];
   }
 };
@@ -767,12 +768,16 @@ function render() {
   month.replaceChildren.apply(month, d.months.map(function (m) { return el('option', { value:m, selected:m === d.month ? 'selected' : false, text:m }); }));
   document.getElementById('last').textContent = (d.lastRefresh ? 'อัปเดตล่าสุด ' + new Date(d.lastRefresh).toLocaleString('th-TH') : 'ยังไม่เคยอัปเดต') + (d.failures.length ? ' · ดึงไม่สำเร็จ ' + d.failures.length + ' รายการ' : '') + (!d.sheetSync ? '' : d.sheetSync.error ? ' · ลงชีทสรุปยอดไม่สำเร็จ: ' + d.sheetSync.error : ' · ลงชีทสรุปยอดแล้ว' + (d.sheetSync.conflicts ? ' (ช่องที่กรอกเองไม่ตรง ' + d.sheetSync.conflicts + ')' : '') + (d.sheetSync.missing.length ? ' (ไม่พบแถว: ' + d.sheetSync.missing.join(', ') + ')' : '')) + (d.docSync && d.docSync.errors.length ? ' · อัปเดต Docs ไม่สำเร็จ: ' + d.docSync.errors.join(', ') : '');
   var pending = d.videos.filter(function (v) { return v.status === 'review'; }).length + manualPending().length;
+  var shown = TABS.filter(function (t) { return !d.readOnly || (t[0] !== 'review' && t[0] !== 'remind'); });
+  if (!shown.some(function (t) { return t[0] === S.tab; })) S.tab = 'overview';
+  document.getElementById('sync').disabled = !!d.readOnly;
   var tabs = document.getElementById('tabs');
-  tabs.replaceChildren.apply(tabs, TABS.map(function (t) {
+  tabs.replaceChildren.apply(tabs, shown.map(function (t) {
     return el('button', { class:S.tab === t[0] ? 'on' : '', text:t[1] + (t[0] === 'review' && pending ? ' (' + pending + ')' : ''), on:{ click:function () { S.tab = t[0]; render(); } } });
   }));
   var view = document.getElementById('view');
-  view.replaceChildren.apply(view, [].concat(VIEWS[S.tab]()));
+  var archiveNote = d.readOnly && S.tab !== 'history' ? el('div', { class:'notice' }, el('span', { text:'เดือนย้อนหลัง ดูได้อย่างเดียว · โควตาจากชีททีม · งานจากแท็บรายงานที่ไม่ได้ซ่อน ยอดบางช่องจึงอาจต่ำกว่าชีทเดิม' })) : null;
+  view.replaceChildren.apply(view, [archiveNote].concat(VIEWS[S.tab]()).filter(Boolean));
 }
 document.getElementById('month').addEventListener('change', function (e) { call('getData', [e.target.value]); });
 function paintTheme() {
