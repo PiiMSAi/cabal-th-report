@@ -322,6 +322,38 @@ function saveVideoFast(v, patch) {
     paintStatus();
   });
 }
+function addManualFast(input) {
+  var month = S.data.month;
+  var tempId = 'temp-' + Date.now();
+  var shown = input.date.slice(0, 7) === month;
+  var row = S.data.rows.filter(function (r) { return r.streamer === input.streamer; })[0];
+  if (shown) {
+    S.data.videos.push({ videoId:tempId, streamer:input.streamer, title:input.title || 'เพิ่มเอง', url:input.url || '', date:input.date, month:month,
+      type:input.type, platform:input.platform, status:'count', manual:'TRUE', locked:'TRUE', views:Number(input.views) || 0, likes:'' });
+    if (row) row.done[input.platform]++;
+    render();
+  }
+  toast('เพิ่มงานแล้ว');
+  Work.saves++;
+  var generation = ++Work.generation;
+  paintStatus();
+  Work.queue = Work.queue.then(function () {
+    return apiPost('addManualVideo', [input, month]);
+  }).then(function (data) {
+    if (generation === Work.generation) { S.data = data; render(); }
+  }).catch(function (e) {
+    if (shown) {
+      S.data.videos = S.data.videos.filter(function (v) { return v.videoId !== tempId; });
+      var current = S.data.rows.filter(function (r) { return r.streamer === input.streamer; })[0];
+      if (current) current.done[input.platform]--;
+      render();
+    }
+    if (e.message !== 'unauthorized') toast('เพิ่มงานไม่สำเร็จ: ' + e.message);
+  }).then(function () {
+    Work.saves--;
+    paintStatus();
+  });
+}
 function markManualChecked(check, week, month) {
   var next = !check.done;
   var setDone = function (value) {
@@ -400,7 +432,7 @@ function manualForm(streamer) {
   var v = el('input', { class:'n', type:'number', min:'0', placeholder:'วิว', 'aria-label':'ยอดวิว' });
   var add = el('button', { class:'b', text:'เพิ่มงานเอง', on:{ click:function () {
     if (!d.value) return toast('เลือกวันที่ก่อน');
-    call('addManualVideo', [{ streamer:streamer, date:d.value, type:t.value, platform:p.value, title:name.value, url:u.value, views:v.value }, S.data.month], 'เพิ่มแล้ว');
+    addManualFast({ streamer:streamer, date:d.value, type:t.value, platform:p.value, title:name.value, url:u.value, views:v.value });
   } } });
   return el('div', { class:'tools' }, [d, t, p, name, u, v, add]);
 }
@@ -434,6 +466,8 @@ function manualChecksSection() {
   var cards = (d.manualChecks || []).map(function (c) {
     var row = d.rows.filter(function (r) { return r.streamer === c.streamer; })[0];
     var main = row && row.quota.PC > row.quota.M ? 'PC' : 'M';
+    var isFacebook = !!row && row.source === 'Facebook';
+    var added = d.videos.filter(function (v) { return v.streamer === c.streamer && v.status === 'count'; }).length;
     var clips = d.videos.filter(function (v) { return v.streamer === c.streamer && v.status === 'ignored' && v.type !== 'Short'; })
       .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
     var rows = clips.map(function (v) {
@@ -461,7 +495,8 @@ function manualChecksSection() {
           markManualChecked(c, d.week, d.month);
         } } })
       ]),
-      rows.length ? el('div', { class:'manual-list' }, rows) : el('p', { class:'muted', text:'เดือนนี้ไม่มีคลิปที่ระบบไม่นับ' })
+      isFacebook ? el('p', { class:'muted', text:'Facebook · เดือนนี้เพิ่มแล้ว ' + added + ' งาน' }) : null,
+      isFacebook ? manualForm(c.streamer) : rows.length ? el('div', { class:'manual-list' }, rows) : el('p', { class:'muted', text:'เดือนนี้ไม่มีคลิปที่ระบบไม่นับ' })
     ]);
   });
   return el('section', { class:'manual' }, [
