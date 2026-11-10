@@ -686,7 +686,11 @@ var VIEWS = {
   },
   remind: function () {
     var list = S.data.reminders.filter(function (r) { return !S.pic || r.pic === S.pic; });
-    return [ el('div', { class:'tools' }, [picFilter(), el('span', { class:'muted', text:'สัปดาห์เริ่ม ' + S.data.week })]),
+    var waiting = list.filter(function (r) { return !r.sent; }).map(function (r) { return r.owner; });
+    var all = waiting.length ? el('button', { class:'b p', type:'button', text:'แจ้งแล้วทั้งหมด (' + waiting.length + ')', on:{ click:function () {
+      call('setReminded', [waiting, S.data.week, true, S.data.month], 'บันทึกแจ้งแล้ว ' + waiting.length + ' คน');
+    } } }) : null;
+    return [ el('div', { class:'tools' }, [picFilter(), all, el('span', { class:'muted', text:'สัปดาห์เริ่ม ' + S.data.week })]),
       el('div', { class:'cards' }, list.map(function (r) {
         return el('div', { class:'card' + (r.sent ? ' done' : '') }, [
           el('b', { text:r.owner }), el('span', { class:'muted', text:' · ' + r.pic }),
